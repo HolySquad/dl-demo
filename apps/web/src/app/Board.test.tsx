@@ -71,7 +71,7 @@ vi.mock('@liveblocks/react', () => {
       return selector({ columns: store.get('columns') })
     },
     useRoom: () => ({
-      subscribe: (_target: unknown, cb: () => void) => {
+      subscribe: (_type: string, cb: () => void) => {
         listeners.add(cb)
         return () => listeners.delete(cb)
       },
@@ -84,8 +84,8 @@ vi.mock('@liveblocks/react', () => {
 // Mock supabase client
 vi.mock('../lib/supabase', () => {
   const upsert = vi.fn().mockResolvedValue({})
-  const single = vi.fn().mockResolvedValue({ data: null })
-  const eq = vi.fn(() => ({ single }))
+  const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null })
+  const eq = vi.fn(() => ({ maybeSingle }))
   const select = vi.fn(() => ({ eq }))
   return {
     supabase: { from: vi.fn(() => ({ select, upsert })) },

@@ -29,11 +29,15 @@ function BoardContent({ boardId }: { boardId: string }) {
   useEffect(() => {
     if (!columns) return
     ;(async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('boards')
         .select('data')
         .eq('id', boardId)
-        .single()
+        .maybeSingle()
+      if (error) {
+        console.warn('Failed to load board', error.message)
+        return
+      }
       if (data?.data && columns.length === 0) {
         const cols = data.data as {
           id: string
@@ -57,12 +61,14 @@ function BoardContent({ boardId }: { boardId: string }) {
 
   useEffect(() => {
     if (!columns) return
-    const unsubscribe = room.subscribe(columns, () => {
-      const serial: {
-        id: string
-        title: string
-        notes: { id: string; text: string }[]
-      }[] = []
+    const unsubscribe = room.subscribe(
+      columns,
+      () => {
+        const serial: {
+          id: string
+          title: string
+          notes: { id: string; text: string }[]
+        }[] = []
       for (let i = 0; i < columns.length; i++) {
         const col = columns.get(i)!
         const notes = col.get('notes')
@@ -78,7 +84,9 @@ function BoardContent({ boardId }: { boardId: string }) {
         })
       }
       supabase.from('boards').upsert({ id: boardId, data: serial })
-    })
+    },
+      { isDeep: true }
+    )
     return unsubscribe
   }, [room, columns, boardId])
 
