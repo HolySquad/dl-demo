@@ -46,7 +46,7 @@ vi.mock('@liveblocks/client', () => ({
 vi.mock('@liveblocks/react', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React: typeof import('react') = require('react')
-  const store = { columns: new MockLiveList() }
+  const store = new MockLiveObject({ columns: new MockLiveList() })
   return {
     LiveblocksProvider: ({ children }: { children: React.ReactNode }) => children,
     RoomProvider: ({
@@ -61,14 +61,14 @@ vi.mock('@liveblocks/react', () => {
       }
       return children
     },
-    useStorage: (selector: (root: typeof store) => unknown) => {
+    useStorage: (selector?: (root: typeof store) => unknown) => {
       const [, force] = React.useReducer((x: number) => x + 1, 0)
       React.useEffect(() => {
         const l = () => force()
         listeners.add(l)
         return () => listeners.delete(l)
       }, [])
-      return selector(store)
+      return selector ? selector(store) : store
     },
     useRoom: () => ({
       subscribe: (_target: unknown, cb: () => void) => {

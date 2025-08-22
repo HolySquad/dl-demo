@@ -15,10 +15,16 @@ type Note = LiveObject<{ id: string; text: string }>
 type Column = LiveObject<{ id: string; title: string; notes: LiveList<Note> }>
 
 function BoardContent({ boardId }: { boardId: string }) {
-  const columns = useStorage(
-    (root) =>
-      (root as unknown as { columns: LiveList<Column> }).columns as LiveList<Column>
+  const storage = useStorage(
+    (root) => root as unknown as LiveObject<{ columns?: LiveList<Column> }>
   )
+  const columns = storage?.get('columns')
+
+  useEffect(() => {
+    if (storage && !columns) {
+      storage.set('columns', new LiveList<Column>([]))
+    }
+  }, [storage, columns])
   const room = useRoom()
   const [, updateMyPresence] = useMyPresence()
   const others = useOthers()
