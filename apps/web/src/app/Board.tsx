@@ -60,35 +60,38 @@ function BoardContent({ boardId }: { boardId: string }) {
   }, [boardId, columns])
 
   useEffect(() => {
-    if (!columns) return
-    const unsubscribe = room.subscribe(
-      columns,
-      () => {
-        const serial: {
-          id: string
-          title: string
-          notes: { id: string; text: string }[]
-        }[] = []
-      for (let i = 0; i < columns.length; i++) {
-        const col = columns.get(i)!
-        const notes = col.get('notes')
-        const notesArr: { id: string; text: string }[] = []
-        for (let j = 0; j < notes.length; j++) {
-          const note = notes.get(j)!
-          notesArr.push({ id: note.get('id'), text: note.get('text') })
-        }
-        serial.push({
-          id: col.get('id'),
-          title: col.get('title'),
-          notes: notesArr,
-        })
-      }
-      supabase.from('boards').upsert({ id: boardId, data: serial })
-    },
-      { isDeep: true }
-    )
-    return unsubscribe
-  }, [room, columns, boardId])
+    let unsubscribe: (() => void) | undefined
+    room.getStorage().then(({ root }) => {
+      const cols = root.get('columns') as LiveList<Column>
+      unsubscribe = room.subscribe(
+        cols,
+        () => {
+          const serial: {
+            id: string
+            title: string
+            notes: { id: string; text: string }[]
+          }[] = []
+          for (let i = 0; i < cols.length; i++) {
+            const col = cols.get(i)!
+            const notes = col.get('notes')
+            const notesArr: { id: string; text: string }[] = []
+            for (let j = 0; j < notes.length; j++) {
+              const note = notes.get(j)!
+              notesArr.push({ id: note.get('id'), text: note.get('text') })
+            }
+            serial.push({
+              id: col.get('id'),
+              title: col.get('title'),
+              notes: notesArr,
+            })
+          }
+          supabase.from('boards').upsert({ id: boardId, data: serial })
+        },
+        { isDeep: true }
+      )
+    })
+    return () => unsubscribe?.()
+  }, [room, boardId])
 
   const addColumn = () => {
     if (!columns) return

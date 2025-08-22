@@ -71,7 +71,8 @@ vi.mock('@liveblocks/react', () => {
       return selector({ columns: store.get('columns') })
     },
     useRoom: () => ({
-      subscribe: (_type: string, cb: () => void) => {
+      getStorage: () => Promise.resolve(store),
+      subscribe: (_node: unknown, cb: () => void) => {
         listeners.add(cb)
         return () => listeners.delete(cb)
       },
