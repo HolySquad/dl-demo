@@ -18,7 +18,7 @@ function BoardContent({ boardId }: { boardId: string }) {
   const columns = useStorage(
     (root) =>
       (root as unknown as { columns: LiveList<Column> }).columns as LiveList<Column>
-  )!
+  )
   const room = useRoom()
   const [, updateMyPresence] = useMyPresence()
   const others = useOthers()
@@ -28,6 +28,7 @@ function BoardContent({ boardId }: { boardId: string }) {
   }, [updateMyPresence])
 
   useEffect(() => {
+    if (!columns) return
     ;(async () => {
       const { data } = await supabase
         .from('boards')
@@ -56,39 +57,41 @@ function BoardContent({ boardId }: { boardId: string }) {
   }, [boardId, columns])
 
   useEffect(() => {
+    if (!columns) return
     const unsubscribe = room.subscribe(columns, () => {
       const serial: {
         id: string
         title: string
         notes: { id: string; text: string }[]
       }[] = []
-        for (let i = 0; i < columns.length; i++) {
-          const col = columns.get(i)!
-          const notes = col.get('notes')
-          const notesArr: { id: string; text: string }[] = []
-          for (let j = 0; j < notes.length; j++) {
-            const note = notes.get(j)!
-            notesArr.push({ id: note.get('id'), text: note.get('text') })
-          }
-          serial.push({
-            id: col.get('id'),
-            title: col.get('title'),
-            notes: notesArr,
-          })
+      for (let i = 0; i < columns.length; i++) {
+        const col = columns.get(i)!
+        const notes = col.get('notes')
+        const notesArr: { id: string; text: string }[] = []
+        for (let j = 0; j < notes.length; j++) {
+          const note = notes.get(j)!
+          notesArr.push({ id: note.get('id'), text: note.get('text') })
         }
+        serial.push({
+          id: col.get('id'),
+          title: col.get('title'),
+          notes: notesArr,
+        })
+      }
       supabase.from('boards').upsert({ id: boardId, data: serial })
     })
     return unsubscribe
   }, [room, columns, boardId])
 
   const addColumn = () => {
-      columns.push(
-        new LiveObject({
-          id: crypto.randomUUID(),
-          title: 'Column',
-          notes: new LiveList<Note>([]),
-        })
-      )
+    if (!columns) return
+    columns.push(
+      new LiveObject({
+        id: crypto.randomUUID(),
+        title: 'Column',
+        notes: new LiveList<Note>([]),
+      })
+    )
   }
 
   const addNote = (column: Column) => {
@@ -96,6 +99,8 @@ function BoardContent({ boardId }: { boardId: string }) {
       new LiveObject({ id: crypto.randomUUID(), text: '' })
     )
   }
+
+  if (!columns) return null
 
   return (
     <div className="space-y-4 p-4">
