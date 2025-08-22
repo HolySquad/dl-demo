@@ -1,32 +1,39 @@
 import { LiveList, LiveObject } from '@liveblocks/client'
 import {
+  LiveblocksProvider,
   RoomProvider,
   useMyPresence,
   useOthers,
   useRoom,
-  useStorage,
+  useStorageRoot,
 } from '@liveblocks/react'
-import { useEffect } from 'react'
+import { useEffect, type ChangeEvent } from 'react'
 import { useParams } from 'react-router-dom'
-import { client } from '../liveblocks/client'
 import { supabase } from '../lib/supabase'
 
 type Note = LiveObject<{ id: string; text: string }>
 type Column = LiveObject<{ id: string; title: string; notes: LiveList<Note> }>
 
 function BoardContent({ boardId }: { boardId: string }) {
-  const columns = useStorage(
-    (root) => root.columns as LiveList<Column>
-  )
+  const [root] = useStorageRoot()
+  const storage = root as LiveObject<{ columns?: LiveList<Column> }> | null
+  const columns = storage?.get('columns') as LiveList<Column> | undefined
+
+  useEffect(() => {
+    if (storage && !columns) {
+      storage.set('columns', new LiveList<Column>([]))
+    }
+  }, [storage, columns])
   const room = useRoom()
-  const { setMyPresence } = useMyPresence()
+  const [, updateMyPresence] = useMyPresence()
   const others = useOthers()
 
   useEffect(() => {
-    setMyPresence({ nickname: localStorage.getItem('nickname') || 'Anon' })
-  }, [setMyPresence])
+    updateMyPresence({ nickname: localStorage.getItem('nickname') || 'Anon' })
+  }, [updateMyPresence])
 
   useEffect(() => {
+    if (!columns) return
     ;(async () => {
       const { data } = await supabase
         .from('boards')
@@ -55,6 +62,7 @@ function BoardContent({ boardId }: { boardId: string }) {
   }, [boardId, columns])
 
   useEffect(() => {
+    if (!columns) return
     const unsubscribe = room.subscribe(columns, () => {
       const serial: {
         id: string
@@ -62,11 +70,11 @@ function BoardContent({ boardId }: { boardId: string }) {
         notes: { id: string; text: string }[]
       }[] = []
       for (let i = 0; i < columns.length; i++) {
-        const col = columns.get(i)
+        const col = columns.get(i)!
         const notes = col.get('notes')
         const notesArr: { id: string; text: string }[] = []
         for (let j = 0; j < notes.length; j++) {
-          const note = notes.get(j)
+          const note = notes.get(j)!
           notesArr.push({ id: note.get('id'), text: note.get('text') })
         }
         serial.push({
@@ -81,11 +89,12 @@ function BoardContent({ boardId }: { boardId: string }) {
   }, [room, columns, boardId])
 
   const addColumn = () => {
+    if (!columns) return
     columns.push(
       new LiveObject({
         id: crypto.randomUUID(),
         title: 'Column',
-        notes: new LiveList<Note>(),
+        notes: new LiveList<Note>([]),
       })
     )
   }
@@ -95,6 +104,8 @@ function BoardContent({ boardId }: { boardId: string }) {
       new LiveObject({ id: crypto.randomUUID(), text: '' })
     )
   }
+
+  if (!columns) return null
 
   return (
     <div className="space-y-4 p-4">
@@ -108,30 +119,34 @@ function BoardContent({ boardId }: { boardId: string }) {
       </div>
       <div className="flex gap-4 overflow-x-auto">
         {Array.from({ length: columns.length }).map((_, i) => {
-          const column = columns.get(i)
+          const column = columns.get(i)!
           const notes = column.get('notes')
           return (
             <div
               key={column.get('id')}
               className="flex w-64 flex-shrink-0 flex-col rounded bg-gray-100 p-2"
             >
-              <input
-                className="mb-2 w-full rounded border p-1"
-                value={column.get('title')}
-                onChange={(e) => column.set('title', e.target.value)}
-              />
+                <input
+                  className="mb-2 w-full rounded border p-1"
+                  value={column.get('title')}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    column.set('title', e.target.value)
+                  }
+                />
               <div className="flex flex-1 flex-col gap-2">
-                {Array.from({ length: notes.length }).map((_, j) => {
-                  const note = notes.get(j)
-                  return (
-                    <textarea
-                      key={note.get('id')}
-                      className="w-full rounded bg-yellow-200 p-2"
-                      value={note.get('text')}
-                      onChange={(e) => note.set('text', e.target.value)}
-                    />
-                  )
-                })}
+                  {Array.from({ length: notes.length }).map((_, j) => {
+                    const note = notes.get(j)!
+                    return (
+                      <textarea
+                        key={note.get('id')}
+                        className="w-full rounded bg-yellow-200 p-2"
+                        value={note.get('text')}
+                        onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+                          note.set('text', e.target.value)
+                        }
+                      />
+                    )
+                  })}
               </div>
               <button
                 onClick={() => addNote(column)}
@@ -142,12 +157,12 @@ function BoardContent({ boardId }: { boardId: string }) {
             </div>
           )
         })}
-        <button
-          onClick={addColumn}
-          className="w-64 flex-shrink-0 rounded border-2 border-dashed p-2"
-        >
-          + Column
-        </button>
+          <button
+            onClick={addColumn}
+            className="w-64 flex-shrink-0 rounded border-2 border-dashed p-2"
+          >
+            + Column
+          </button>
       </div>
       <div className="text-sm">
         Online: {others.map((o) => o.presence.nickname).join(', ') || 'just you'}
@@ -159,13 +174,16 @@ function BoardContent({ boardId }: { boardId: string }) {
 export default function Board() {
   const { boardId = '' } = useParams()
   return (
-    <RoomProvider
-      id={`retro-${boardId}`}
-      client={client}
-      initialPresence={{ nickname: '' }}
-      initialStorage={{ columns: new LiveList<Column>() }}
+    <LiveblocksProvider
+      publicApiKey={import.meta.env.VITE_LIVEBLOCKS_PUBLIC_KEY as string}
     >
-      <BoardContent boardId={boardId} />
-    </RoomProvider>
+      <RoomProvider
+        id={`retro-${boardId}`}
+        initialPresence={{ nickname: '' }}
+        initialStorage={{ columns: new LiveList<Column>([]) }}
+      >
+        <BoardContent boardId={boardId} />
+      </RoomProvider>
+    </LiveblocksProvider>
   )
 }
