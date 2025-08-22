@@ -34,6 +34,9 @@ const { listeners, MockLiveObject, MockLiveList } = vi.hoisted(() => {
     get(index: number) {
       return this.items[index]
     }
+    map<U>(fn: (item: T, index: number) => U): U[] {
+      return this.items.map(fn)
+    }
   }
   return { listeners, MockLiveObject, MockLiveList }
 })
@@ -61,17 +64,18 @@ vi.mock('@liveblocks/react', () => {
       }
       return children
     },
-    useStorageRoot: () => {
+    useStorage: <T,>(selector: (root: unknown) => T) => {
       const [, force] = React.useReducer((x: number) => x + 1, 0)
       React.useEffect(() => {
         const l = () => force()
         listeners.add(l)
         return () => listeners.delete(l)
       }, [])
-      return [store]
+      return selector(store as unknown)
     },
     useRoom: () => ({
-      subscribe: (_target: unknown, cb: () => void) => {
+      getStorage: () => Promise.resolve({ root: store }),
+      subscribe: (_node: unknown, cb: () => void) => {
         listeners.add(cb)
         return () => listeners.delete(cb)
       },
@@ -84,8 +88,8 @@ vi.mock('@liveblocks/react', () => {
 // Mock supabase client
 vi.mock('../lib/supabase', () => {
   const upsert = vi.fn().mockResolvedValue({})
-  const single = vi.fn().mockResolvedValue({ data: null })
-  const eq = vi.fn(() => ({ single }))
+  const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null })
+  const eq = vi.fn(() => ({ maybeSingle }))
   const select = vi.fn(() => ({ eq }))
   return {
     supabase: { from: vi.fn(() => ({ select, upsert })) },

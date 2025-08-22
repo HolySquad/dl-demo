@@ -5,7 +5,7 @@ import {
   useMyPresence,
   useOthers,
   useRoom,
-  useStorageRoot,
+  useStorage,
 } from '@liveblocks/react'
 import { useEffect, type ChangeEvent } from 'react'
 import { useParams } from 'react-router-dom'
@@ -15,15 +15,9 @@ type Note = LiveObject<{ id: string; text: string }>
 type Column = LiveObject<{ id: string; title: string; notes: LiveList<Note> }>
 
 function BoardContent({ boardId }: { boardId: string }) {
-  const [root] = useStorageRoot()
-  const storage = root as LiveObject<{ columns?: LiveList<Column> }> | null
-  const columns = storage?.get('columns') as LiveList<Column> | undefined
-
-  useEffect(() => {
-    if (storage && !columns) {
-      storage.set('columns', new LiveList<Column>([]))
-    }
-  }, [storage, columns])
+  const columns = useStorage<LiveList<Column>>((root) =>
+    (root as unknown as LiveObject<any>).get('columns')
+  )
   const room = useRoom()
   const [, updateMyPresence] = useMyPresence()
   const others = useOthers()
@@ -35,11 +29,15 @@ function BoardContent({ boardId }: { boardId: string }) {
   useEffect(() => {
     if (!columns) return
     ;(async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('boards')
         .select('data')
         .eq('id', boardId)
-        .single()
+        .maybeSingle()
+      if (error) {
+        console.warn('Failed to load board', error.message)
+        return
+      }
       if (data?.data && columns.length === 0) {
         const cols = data.data as {
           id: string
@@ -62,31 +60,38 @@ function BoardContent({ boardId }: { boardId: string }) {
   }, [boardId, columns])
 
   useEffect(() => {
-    if (!columns) return
-    const unsubscribe = room.subscribe(columns, () => {
-      const serial: {
-        id: string
-        title: string
-        notes: { id: string; text: string }[]
-      }[] = []
-      for (let i = 0; i < columns.length; i++) {
-        const col = columns.get(i)!
-        const notes = col.get('notes')
-        const notesArr: { id: string; text: string }[] = []
-        for (let j = 0; j < notes.length; j++) {
-          const note = notes.get(j)!
-          notesArr.push({ id: note.get('id'), text: note.get('text') })
-        }
-        serial.push({
-          id: col.get('id'),
-          title: col.get('title'),
-          notes: notesArr,
-        })
-      }
-      supabase.from('boards').upsert({ id: boardId, data: serial })
+    let unsubscribe: (() => void) | undefined
+    room.getStorage().then(({ root }) => {
+      const cols = root.get('columns') as LiveList<Column>
+      unsubscribe = room.subscribe(
+        cols,
+        () => {
+          const serial: {
+            id: string
+            title: string
+            notes: { id: string; text: string }[]
+          }[] = []
+          for (let i = 0; i < cols.length; i++) {
+            const col = cols.get(i)!
+            const notes = col.get('notes')
+            const notesArr: { id: string; text: string }[] = []
+            for (let j = 0; j < notes.length; j++) {
+              const note = notes.get(j)!
+              notesArr.push({ id: note.get('id'), text: note.get('text') })
+            }
+            serial.push({
+              id: col.get('id'),
+              title: col.get('title'),
+              notes: notesArr,
+            })
+          }
+          supabase.from('boards').upsert({ id: boardId, data: serial })
+        },
+        { isDeep: true }
+      )
     })
-    return unsubscribe
-  }, [room, columns, boardId])
+    return () => unsubscribe?.()
+  }, [room, boardId])
 
   const addColumn = () => {
     if (!columns) return
@@ -118,35 +123,31 @@ function BoardContent({ boardId }: { boardId: string }) {
         </button>
       </div>
       <div className="flex gap-4 overflow-x-auto">
-        {Array.from({ length: columns.length }).map((_, i) => {
-          const column = columns.get(i)!
+        {columns.map((column) => {
           const notes = column.get('notes')
           return (
             <div
               key={column.get('id')}
               className="flex w-64 flex-shrink-0 flex-col rounded bg-gray-100 p-2"
             >
-                <input
-                  className="mb-2 w-full rounded border p-1"
-                  value={column.get('title')}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    column.set('title', e.target.value)
-                  }
-                />
+              <input
+                className="mb-2 w-full rounded border p-1"
+                value={column.get('title')}
+                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                  column.set('title', e.target.value)
+                }
+              />
               <div className="flex flex-1 flex-col gap-2">
-                  {Array.from({ length: notes.length }).map((_, j) => {
-                    const note = notes.get(j)!
-                    return (
-                      <textarea
-                        key={note.get('id')}
-                        className="w-full rounded bg-yellow-200 p-2"
-                        value={note.get('text')}
-                        onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
-                          note.set('text', e.target.value)
-                        }
-                      />
-                    )
-                  })}
+                {notes.map((note) => (
+                  <textarea
+                    key={note.get('id')}
+                    className="w-full rounded bg-yellow-200 p-2"
+                    value={note.get('text')}
+                    onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+                      note.set('text', e.target.value)
+                    }
+                  />
+                ))}
               </div>
               <button
                 onClick={() => addNote(column)}
@@ -157,12 +158,12 @@ function BoardContent({ boardId }: { boardId: string }) {
             </div>
           )
         })}
-          <button
-            onClick={addColumn}
-            className="w-64 flex-shrink-0 rounded border-2 border-dashed p-2"
-          >
-            + Column
-          </button>
+        <button
+          onClick={addColumn}
+          className="w-64 flex-shrink-0 rounded border-2 border-dashed p-2"
+        >
+          + Column
+        </button>
       </div>
       <div className="text-sm">
         Online: {others.map((o) => o.presence.nickname).join(', ') || 'just you'}
