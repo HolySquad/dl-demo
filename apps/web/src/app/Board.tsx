@@ -15,8 +15,8 @@ type Note = LiveObject<{ id: string; text: string }>
 type Column = LiveObject<{ id: string; title: string; notes: LiveList<Note> }>
 
 function BoardContent({ boardId }: { boardId: string }) {
-  const columns = useStorage<LiveList<Column> | undefined>(
-    (root) => (root as { columns?: LiveList<Column> }).columns
+  const columns = useStorage<LiveList<Column>>((root) =>
+    (root as unknown as LiveObject<any>).get('columns')
   )
   const room = useRoom()
   const [, updateMyPresence] = useMyPresence()
@@ -123,35 +123,31 @@ function BoardContent({ boardId }: { boardId: string }) {
         </button>
       </div>
       <div className="flex gap-4 overflow-x-auto">
-        {Array.from({ length: columns.length }).map((_, i) => {
-          const column = columns.get(i)!
+        {columns.map((column) => {
           const notes = column.get('notes')
           return (
             <div
               key={column.get('id')}
               className="flex w-64 flex-shrink-0 flex-col rounded bg-gray-100 p-2"
             >
-                <input
-                  className="mb-2 w-full rounded border p-1"
-                  value={column.get('title')}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    column.set('title', e.target.value)
-                  }
-                />
+              <input
+                className="mb-2 w-full rounded border p-1"
+                value={column.get('title')}
+                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                  column.set('title', e.target.value)
+                }
+              />
               <div className="flex flex-1 flex-col gap-2">
-                  {Array.from({ length: notes.length }).map((_, j) => {
-                    const note = notes.get(j)!
-                    return (
-                      <textarea
-                        key={note.get('id')}
-                        className="w-full rounded bg-yellow-200 p-2"
-                        value={note.get('text')}
-                        onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
-                          note.set('text', e.target.value)
-                        }
-                      />
-                    )
-                  })}
+                {notes.map((note) => (
+                  <textarea
+                    key={note.get('id')}
+                    className="w-full rounded bg-yellow-200 p-2"
+                    value={note.get('text')}
+                    onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+                      note.set('text', e.target.value)
+                    }
+                  />
+                ))}
               </div>
               <button
                 onClick={() => addNote(column)}
@@ -162,12 +158,12 @@ function BoardContent({ boardId }: { boardId: string }) {
             </div>
           )
         })}
-          <button
-            onClick={addColumn}
-            className="w-64 flex-shrink-0 rounded border-2 border-dashed p-2"
-          >
-            + Column
-          </button>
+        <button
+          onClick={addColumn}
+          className="w-64 flex-shrink-0 rounded border-2 border-dashed p-2"
+        >
+          + Column
+        </button>
       </div>
       <div className="text-sm">
         Online: {others.map((o) => o.presence.nickname).join(', ') || 'just you'}

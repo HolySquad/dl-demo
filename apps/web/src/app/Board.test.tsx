@@ -34,6 +34,9 @@ const { listeners, MockLiveObject, MockLiveList } = vi.hoisted(() => {
     get(index: number) {
       return this.items[index]
     }
+    map<U>(fn: (item: T, index: number) => U): U[] {
+      return this.items.map(fn)
+    }
   }
   return { listeners, MockLiveObject, MockLiveList }
 })
@@ -61,17 +64,17 @@ vi.mock('@liveblocks/react', () => {
       }
       return children
     },
-    useStorage: <T,>(selector: (root: { columns?: InstanceType<typeof MockLiveList> }) => T) => {
+    useStorage: <T,>(selector: (root: unknown) => T) => {
       const [, force] = React.useReducer((x: number) => x + 1, 0)
       React.useEffect(() => {
         const l = () => force()
         listeners.add(l)
         return () => listeners.delete(l)
       }, [])
-      return selector({ columns: store.get('columns') })
+      return selector(store as unknown)
     },
     useRoom: () => ({
-      getStorage: () => Promise.resolve(store),
+      getStorage: () => Promise.resolve({ root: store }),
       subscribe: (_node: unknown, cb: () => void) => {
         listeners.add(cb)
         return () => listeners.delete(cb)
