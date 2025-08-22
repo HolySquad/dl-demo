@@ -61,14 +61,14 @@ vi.mock('@liveblocks/react', () => {
       }
       return children
     },
-    useStorageRoot: () => {
+    useStorage: <T,>(selector: (root: { columns?: InstanceType<typeof MockLiveList> }) => T) => {
       const [, force] = React.useReducer((x: number) => x + 1, 0)
       React.useEffect(() => {
         const l = () => force()
         listeners.add(l)
         return () => listeners.delete(l)
       }, [])
-      return [store]
+      return selector({ columns: store.get('columns') })
     },
     useRoom: () => ({
       subscribe: (_target: unknown, cb: () => void) => {

@@ -5,7 +5,7 @@ import {
   useMyPresence,
   useOthers,
   useRoom,
-  useStorageRoot,
+  useStorage,
 } from '@liveblocks/react'
 import { useEffect, type ChangeEvent } from 'react'
 import { useParams } from 'react-router-dom'
@@ -15,15 +15,9 @@ type Note = LiveObject<{ id: string; text: string }>
 type Column = LiveObject<{ id: string; title: string; notes: LiveList<Note> }>
 
 function BoardContent({ boardId }: { boardId: string }) {
-  const [root] = useStorageRoot()
-  const storage = root as LiveObject<{ columns?: LiveList<Column> }> | null
-  const columns = storage?.get('columns') as LiveList<Column> | undefined
-
-  useEffect(() => {
-    if (storage && !columns) {
-      storage.set('columns', new LiveList<Column>([]))
-    }
-  }, [storage, columns])
+  const columns = useStorage<LiveList<Column> | undefined>(
+    (root) => (root as { columns?: LiveList<Column> }).columns
+  )
   const room = useRoom()
   const [, updateMyPresence] = useMyPresence()
   const others = useOthers()
