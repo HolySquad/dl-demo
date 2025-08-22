@@ -57,18 +57,18 @@ vi.mock('@liveblocks/react', () => {
       children: React.ReactNode
     }) => {
       if (initialStorage) {
-        store.columns = initialStorage.columns
+        store.set('columns', initialStorage.columns)
       }
       return children
     },
-    useStorage: (selector?: (root: typeof store) => unknown) => {
+    useStorageRoot: () => {
       const [, force] = React.useReducer((x: number) => x + 1, 0)
       React.useEffect(() => {
         const l = () => force()
         listeners.add(l)
         return () => listeners.delete(l)
       }, [])
-      return selector ? selector(store) : store
+      return [store]
     },
     useRoom: () => ({
       subscribe: (_target: unknown, cb: () => void) => {
